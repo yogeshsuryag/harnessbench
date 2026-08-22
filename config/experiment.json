@@ -1,8 +1,14 @@
 {
   "$schema": "./schemas/experiment.schema.json",
   "schema_version": "1.0",
-  "experiment_id": "terminal-bench-full-harness-comparison",
-  "description": "Full Terminal-Bench suite comparison with a fixed OpenRouter model and Daytona execution.",
+  "experiment_id": "terminal-bench-pilot-harness-comparison",
+  "description": "Terminal-Bench 3.0 pilot comparison with a fixed OpenRouter model and Daytona execution.",
+  "study": {
+    "phase": "pilot",
+    "scheduled_trials": 370,
+    "replications_per_task_harness": 1,
+    "analysis_policy": "descriptive_task_and_capability_comparison"
+  },
   "toolchain": {
     "harbor_version": "0.22.0",
     "python_min_version": "3.12",
@@ -59,13 +65,13 @@
       "id": "opencode2",
       "harbor_agent": "custom_agents.opencode2:OpenCode2",
       "version": "0.0.0-beta-17927",
-      "model_argument": "stealth/ox-alpha",
+      "model_argument": "openrouter/stealth/ox-alpha",
       "reasoning_setting": "max",
       "native_config": "config/agents/opencode2.json"
     },
     {
       "id": "codex",
-      "harbor_agent": "codex",
+      "harbor_agent": "custom_agents.codex:OpenRouterCodex",
       "version": "0.149.0",
       "model_argument": "stealth/ox-alpha",
       "reasoning_setting": "max",
@@ -84,7 +90,9 @@
       "harbor_agent": "pi",
       "version": "0.84.2",
       "model_argument": "openrouter/stealth/ox-alpha",
-      "reasoning_setting": "xhigh",
+      "reasoning_setting": "max",
+      "native_reasoning_setting": "xhigh",
+      "model_api": "openai-completions",
       "native_config": "config/agents/pi.json"
     }
   ],

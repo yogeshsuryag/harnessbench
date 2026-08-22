@@ -1,8 +1,19 @@
 {
-  "model": "stealth/ox-alpha",
-  "provider": "openrouter",
-  "base_url": "https://openrouter.ai/api/v1",
-  "provider_order": ["stealth"],
-  "allow_fallbacks": false,
-  "reasoning_effort": "max"
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openrouter": {
+      "models": {
+        "stealth/ox-alpha": {
+          "options": {
+            "provider": {
+              "order": ["stealth"],
+              "allow_fallbacks": false,
+              "require_parameters": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "model": "openrouter/stealth/ox-alpha"
 }

@@ -17,6 +17,7 @@ class OpenCode2(OpenCode):
     DEFAULT_VERSION = "0.0.0-beta-17927"
     _BINARY = "opencode2"
     _OUTPUT_FILENAME = "opencode2.txt"
+    _ERROR_FILENAME = "opencode2.stderr.txt"
 
     @staticmethod
     @override
@@ -88,7 +89,8 @@ class OpenCode2(OpenCode):
                 f"{self._BINARY} --model={shlex.quote(self.model_name)} run "
                 f"--format=json {resume_flag}{cli_flags_arg}"
                 f"--thinking --dangerously-skip-permissions -- {escaped_instruction} "
-                f"2>&1 | stdbuf -oL tee {output_path}"
+                f"> >(stdbuf -oL tee {output_path}) "
+                f"2> >(stdbuf -oL tee /logs/agent/{self._ERROR_FILENAME} >&2)"
             ),
             env=env,
         )

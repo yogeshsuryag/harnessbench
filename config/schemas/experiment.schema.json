@@ -1,10 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["schema_version", "experiment_id", "toolchain", "model", "dataset", "execution", "agents"],
+  "required": ["schema_version", "experiment_id", "toolchain", "model", "dataset", "execution", "agents", "study"],
   "properties": {
     "schema_version": {"type": "string"},
     "experiment_id": {"type": "string"},
+    "study": {
+      "type": "object",
+      "required": ["phase", "scheduled_trials", "replications_per_task_harness"],
+      "properties": {
+        "phase": {"const": "pilot"},
+        "scheduled_trials": {"const": 370},
+        "replications_per_task_harness": {"const": 1},
+        "analysis_policy": {"type": "string"}
+      }
+    },
     "toolchain": {"type": "object"},
     "model": {
       "type": "object",
@@ -15,7 +25,8 @@
         "openrouter_base_url": {"type": "string", "format": "uri"},
         "reasoning_effort": {"enum": ["low", "high", "max"]},
         "provider_order": {"type": "array", "items": {"type": "string"}},
-        "allow_fallbacks": {"type": "boolean"}
+        "allow_fallbacks": {"type": "boolean"},
+        "require_parameters": {"type": "boolean"}
       }
     },
     "dataset": {
@@ -40,7 +51,11 @@
           "id": {"type": "string"},
           "harbor_agent": {"type": "string"},
           "version": {"type": "string"},
-          "model_argument": {"type": "string"}
+          "model_argument": {"type": "string"},
+          "native_config": {"type": "string"},
+          "reasoning_setting": {"type": "string"},
+          "native_reasoning_setting": {"type": "string"},
+          "model_api": {"type": "string"}
         }
       }
     }

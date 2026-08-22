@@ -5,6 +5,7 @@ model_reasoning_effort = "max"
 [model_providers.openrouter]
 name = "openrouter"
 base_url = "https://openrouter.ai/api/v1"
+wire_api = "responses"
 
 [model_providers.openrouter.auth]
 command = "sh"

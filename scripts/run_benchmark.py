@@ -21,6 +21,7 @@ from common import (
     model_metadata,
     parse_dotenv,
     relative_path,
+    sha256_file,
     tool_versions,
     utc_now,
     write_json,
@@ -86,15 +87,17 @@ def build_job_config(
     native_config = ROOT / agent["native_config"]
     kwargs: dict = {}
     if agent["id"] in {"opencode", "opencode2"}:
-        kwargs["opencode_config"] = load_json(ROOT / "config" / "agents" / "opencode.json")
+        kwargs["opencode_config"] = load_json(native_config)
         kwargs["variant"] = config["model"]["reasoning_effort"]
     elif agent["id"] == "codex":
         kwargs["config"] = str(native_config.resolve())
+        kwargs["reasoning_effort"] = config["model"]["reasoning_effort"]
     elif agent["id"] == "claude-code":
         kwargs["config"] = str(native_config.resolve())
         kwargs["reasoning_effort"] = config["model"]["reasoning_effort"]
     elif agent["id"] == "pi":
-        kwargs["thinking"] = "xhigh"
+        kwargs["model_api"] = agent.get("model_api", "openai-completions")
+        kwargs["thinking"] = agent.get("native_reasoning_setting", "xhigh")
 
     kwargs["version"] = agent["version"]
 
@@ -150,6 +153,18 @@ def run_one(
     job_config_path = run_directory / "job-config.json"
     write_json(job_config_path, job_config)
 
+    native_config_path = ROOT / agent["native_config"]
+    source_files = [
+        CONFIG_PATH,
+        native_config_path,
+        ROOT / "pyproject.toml",
+        ROOT / "uv.lock",
+    ]
+    if agent["id"] == "opencode2":
+        source_files.append(ROOT / "custom_agents" / "opencode2.py")
+    if agent["id"] == "codex":
+        source_files.append(ROOT / "custom_agents" / "codex.py")
+
     manifest = {
         "schema_version": "1.0",
         "run_id": run_directory.name,
@@ -169,6 +184,18 @@ def run_one(
         },
         "model_metadata": model_metadata(config["model"]["id"]),
         "endpoint_metadata": endpoint_metadata(config["model"]["id"]),
+        "routing_policy": {
+            "model_id": config["model"]["id"],
+            "provider": config["model"]["openrouter_provider"],
+            "provider_order": config["model"]["provider_order"],
+            "allow_fallbacks": config["model"]["allow_fallbacks"],
+            "require_parameters": config["model"].get("require_parameters", False),
+        },
+        "source_hashes": {
+            relative_path(path): sha256_file(path)
+            for path in source_files
+            if path.exists()
+        },
         "job_config_path": relative_path(job_config_path),
     }
     write_json(run_directory / "manifest.json", manifest)
@@ -194,7 +221,8 @@ def run_one(
     ).open("w", encoding="utf-8", newline="\n") as stderr:
         process = subprocess.run(command, cwd=ROOT, stdout=stdout, stderr=stderr, check=False)
 
-    manifest["status"] = "passed" if process.returncode == 0 else "process-error"
+    manifest["status"] = "process-complete" if process.returncode == 0 else "process-error"
+    manifest["harbor_process_ok"] = process.returncode == 0
     manifest["exit_code"] = process.returncode
     manifest["finished_at"] = utc_now()
     write_json(run_directory / "manifest.json", manifest)

@@ -1,6 +1,6 @@
 # harnessbench
 
-`harnessbench` runs reproducible Terminal-Bench comparisons across terminal
+`harnessbench` runs a 370-trial Terminal-Bench 3.0 pilot across terminal
 coding agents. Harbor controls the jobs on the Windows controller, while
 Daytona provides independent Linux task sandboxes.
 
@@ -15,7 +15,8 @@ Daytona provides independent Linux task sandboxes.
 - Attempts: 1
 - Initial concurrency: 1
 - Retries: 0
-- Full comparison: 370 trials
+- Pilot comparison: 370 trials
+- Replications per task and harness: 1
 
 The dataset ref is immutable. Do not replace it with `latest` during a
 comparison.
@@ -62,10 +63,24 @@ uv run --locked python scripts/run_benchmark.py --agent opencode --dry-run
 uv run --locked harbor run --print-config --config results/runs/<run-id>/job-config.json
 ```
 
-Run one Oracle task before agent trials:
+Run the one-task Oracle smoke test before agent trials:
 
 ```text
 uv run --locked harbor run -d terminal-bench/terminal-bench@sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3 -a oracle -n 1 -k 1 -l 1 --env daytona --env-file .env --yes
+```
+
+Before interpreting the pilot, validate the released task suite with the
+Oracle solution five times. This is separate from the 370 agent comparison
+trials and follows the Terminal-Bench 3.0 task-health guidance:
+
+```text
+uv run --locked harbor run -d terminal-bench/terminal-bench@sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3 -a oracle -n 1 -k 5 -l 74 --env daytona --env-file .env --yes
+```
+
+Validate the completed Oracle job before interpreting agent results:
+
+```text
+uv run --locked python scripts/validate_oracle.py jobs/<oracle-job-directory>
 ```
 
 Run the same task with every agent after the Oracle smoke test passes:
@@ -87,32 +102,59 @@ Run the full suite only after all smoke tests pass:
 uv run --locked python scripts/run_benchmark.py --agent all
 ```
 
-Measure concurrency separately at `2`, `4`, `8`, and `16`, keeping the model,
-dataset, resources, timeout, attempts, retry policy, and prompt unchanged.
+The pilot is descriptive: it identifies which harness solves which task and
+capability categories. It does not claim statistical significance from one
+trial per task.
 
 ## Results
 
 Raw Harbor output is stored in `results/runs/<run-id>/` and ignored by Git.
-Manifests record the experiment contract, tool versions, model metadata,
-configuration hashes, timestamps, job identifiers, statuses, and artifact
-paths. Inventory completed artifacts with:
+Manifests record the full experiment contract, `tool_versions`,
+`model_metadata`/`endpoint_metadata`, `routing_policy` (`provider`,
+`provider_order`, `allow_fallbacks`, `require_parameters`), `source_hashes`
+for `config/experiment.json`, native agent configs, `pyproject.toml`,
+`uv.lock`, and adapter files, timestamps, job identifiers,
+`status=process-complete|process-error`, `harbor_process_ok`, `exit_code`,
+and artifact paths. Inventory completed artifacts with:
 
 ```text
 uv run --locked python scripts/inventory_results.py results/runs/<run-id>
 ```
 
+Normalize completed Harbor trial results and produce pilot summaries with:
+
+```text
+uv run --locked python scripts/pilot_results.py
+```
+
+Derived output is written to `results/derived/pilot/`:
+
+- `trial_records.jsonl`: one normalized row per Harbor trial
+- `harness_summary.json`: overall pass and failure summaries
+- `category_summary.json`: SWE capability and subcategory summaries
+- `capability_summary.json`: cross-cutting coding capability summaries
+- `task_matrix.json`: task-by-harness outcome matrix
+- `pilot_summary.json`: combined pilot report data
+
 Do not manually edit raw jobs, trajectories, logs, or manifests. Keep agent,
-model API, infrastructure, verifier, and benchmark failures distinct.
+model API, infrastructure, verifier, and benchmark failures distinct via
+`failure_category` and `outcome=pass|task_fail|graded|error|incomplete`.
 
 ## Repository Layout
 
 ```text
 config/experiment.json       locked experiment contract
 config/agents/               native agent configurations
-config/schemas/              JSON schemas
+config/schemas/              JSON schemas (experiment, TB3 catalog)
+config/tb3_task_catalog.json Terminal-Bench 3.0 task taxonomy and digests
 custom_agents/opencode2.py   Harbor adapter for OpenCode 2
+custom_agents/codex.py       Full-model OpenRouter Codex adapter
 scripts/preflight.py         no-job validation
+scripts/validate_oracle.py   five-pass Oracle suite validation
 scripts/run_benchmark.py     job launcher and manifest writer
 scripts/inventory_results.py raw artifact hashing
+scripts/pilot_results.py     pilot result normalization and summaries
+results/schema/              pilot trial JSON schema
 results/runs/                ignored raw jobs and logs
+results/derived/pilot/       normalized pilot summaries
 ```
