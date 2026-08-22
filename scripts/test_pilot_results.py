@@ -7,10 +7,19 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from common import COHORTS, task_names_for_cohort
 from pilot_results import build_summaries, load_json, load_rows
 
 
 class PilotResultsTest(unittest.TestCase):
+    def test_catalog_cohorts_partition_the_full_task_set(self) -> None:
+        catalog = load_json(Path(__file__).resolve().parents[1] / "config" / "tb3_task_catalog.json")
+        cohorts = [set(task_names_for_cohort(catalog, cohort)) for cohort in COHORTS]
+
+        self.assertEqual([len(tasks) for tasks in cohorts], [25, 27, 22])
+        self.assertEqual(set.union(*cohorts), set(catalog["tasks"]))
+        self.assertEqual(sum(len(tasks) for tasks in cohorts), len(set.union(*cohorts)))
+
     def test_normalizes_a_harbor_trial_and_groups_it(self) -> None:
         catalog = load_json(Path(__file__).resolve().parents[1] / "config" / "tb3_task_catalog.json")
         with tempfile.TemporaryDirectory() as temporary:
@@ -60,8 +69,11 @@ class PilotResultsTest(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertTrue(rows[0]["passed"])
             self.assertEqual(rows[0]["uncached_input_tokens"], 80)
-            summary = build_summaries(rows, catalog)
+            summary = build_summaries(rows, catalog, {"ico-path-patch"})
             self.assertEqual(summary["harness_summary"][0]["passes"], 1)
+            self.assertEqual(summary["harness_summary"][0]["expected_observations"], 1)
+            self.assertEqual(summary["harness_summary"][0]["unobserved_observations"], 0)
+            self.assertEqual(len(summary["task_matrix"]), 1)
             self.assertEqual(
                 next(item for item in summary["task_matrix"] if item["task_id"] == "ico-path-patch")[
                     "harnesses"

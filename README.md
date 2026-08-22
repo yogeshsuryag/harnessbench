@@ -96,11 +96,28 @@ uv run --locked python scripts/run_benchmark.py --agent pi --task ico-path-patch
 Confirm that every request uses `stealth/ox-alpha` through the `stealth`
 provider and that the Terminal-Bench verifier runs before scaling up.
 
-Run the full suite only after all smoke tests pass:
+Run the staged pilot only after all smoke tests pass. The cohort selector uses
+the pinned `coding_relevance` field in `config/tb3_task_catalog.json` and keeps
+the full 370-trial contract unchanged:
 
 ```text
-uv run --locked python scripts/run_benchmark.py --agent all
+uv run --locked python scripts/run_benchmark.py --agent all --cohort core_swe
+uv run --locked python scripts/run_benchmark.py --agent all --cohort adjacent_engineering
+uv run --locked python scripts/run_benchmark.py --agent all --cohort domain
 ```
+
+The three stages contain 25, 27, and 22 tasks respectively, for 125, 135,
+and 110 agent trials. Each run manifest records the cohort and resolved task
+list. Produce a stage-specific report with the matching cohort filter:
+
+```text
+uv run --locked python scripts/pilot_results.py --cohort core_swe --output results/derived/pilot/core_swe
+uv run --locked python scripts/pilot_results.py --cohort adjacent_engineering --output results/derived/pilot/adjacent_engineering
+uv run --locked python scripts/pilot_results.py --cohort domain --output results/derived/pilot/domain
+```
+
+Run `scripts/pilot_results.py` without `--cohort` after all stages to produce
+the aggregate 74-task report.
 
 The pilot is descriptive: it identifies which harness solves which task and
 capability categories. It does not claim statistical significance from one

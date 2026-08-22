@@ -13,6 +13,7 @@ import uuid
 
 from common import (
     CONFIG_PATH,
+    COHORTS,
     ENV_PATH,
     ROOT,
     endpoint_metadata,
@@ -22,6 +23,7 @@ from common import (
     parse_dotenv,
     relative_path,
     sha256_file,
+    task_names_for_cohort,
     tool_versions,
     utc_now,
     write_json,
@@ -143,6 +145,7 @@ def run_one(
     concurrency: int,
     attempts: int,
     task_names: list[str] | None,
+    cohort: str | None,
     dry_run: bool,
 ) -> int:
     run_directory = ROOT / "results" / "runs" / run_id(agent["id"])
@@ -156,6 +159,7 @@ def run_one(
     native_config_path = ROOT / agent["native_config"]
     source_files = [
         CONFIG_PATH,
+        ROOT / "config" / "tb3_task_catalog.json",
         native_config_path,
         ROOT / "pyproject.toml",
         ROOT / "uv.lock",
@@ -175,6 +179,7 @@ def run_one(
         "overrides": {
             "concurrency": concurrency,
             "attempts": attempts,
+            "cohort": cohort,
             "task_names": task_names,
         },
         "tool_versions": tool_versions(),
@@ -236,7 +241,9 @@ def main() -> int:
     parser.add_argument("--env-file", type=Path, default=ENV_PATH)
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--attempts", type=int)
-    parser.add_argument("--task", action="append", dest="task_names")
+    task_selection = parser.add_mutually_exclusive_group()
+    task_selection.add_argument("--cohort", choices=COHORTS)
+    task_selection.add_argument("--task", action="append", dest="task_names")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -244,7 +251,14 @@ def main() -> int:
     execution = config["execution"]
     concurrency = args.concurrency or execution["concurrency"]
     attempts = args.attempts or execution["attempts"]
-    task_names = args.task_names if args.task_names else config["dataset"].get("task_names")
+    if args.cohort:
+        catalog = load_json(ROOT / "config" / "tb3_task_catalog.json")
+        try:
+            task_names = task_names_for_cohort(catalog, args.cohort)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+    else:
+        task_names = args.task_names if args.task_names else config["dataset"].get("task_names")
 
     if not args.dry_run and not config["dataset"].get("ref"):
         raise SystemExit("Refusing to run with an unpinned dataset. Set dataset.ref first.")
@@ -255,7 +269,16 @@ def main() -> int:
         next(agent for agent in config["agents"] if agent["id"] == args.agent)
     ]
     exit_codes = [
-        run_one(config, agent, args.env_file, concurrency, attempts, task_names, args.dry_run)
+        run_one(
+            config,
+            agent,
+            args.env_file,
+            concurrency,
+            attempts,
+            task_names,
+            args.cohort,
+            args.dry_run,
+        )
         for agent in selected
     ]
     return 0 if all(code == 0 for code in exit_codes) else 1

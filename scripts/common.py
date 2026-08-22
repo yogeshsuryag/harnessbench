@@ -16,6 +16,29 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "experiment.json"
 ENV_PATH = ROOT / ".env"
 UV_COMMAND = os.environ.get("UV", "uv")
+COHORTS = ("core_swe", "adjacent_engineering", "domain")
+
+
+def task_names_for_cohort(catalog: dict[str, Any], cohort: str | None = None) -> list[str]:
+    if cohort is not None and cohort not in COHORTS:
+        raise ValueError(f"Unknown cohort {cohort!r}; expected one of {', '.join(COHORTS)}")
+
+    tasks = catalog.get("tasks")
+    if not isinstance(tasks, dict):
+        raise ValueError("Task catalog is missing its tasks object")
+
+    task_names = sorted(
+        task_name
+        for task_name, metadata in tasks.items()
+        if isinstance(task_name, str)
+        and (
+            cohort is None
+            or (isinstance(metadata, dict) and metadata.get("coding_relevance") == cohort)
+        )
+    )
+    if cohort is not None and not task_names:
+        raise ValueError(f"Cohort {cohort!r} does not contain any tasks")
+    return task_names
 
 
 def uv_run_command(*args: str) -> list[str]:

@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 from typing import Any, Iterable
 
-from common import ROOT, relative_path, sha256_file, utc_now
+from common import COHORTS, ROOT, relative_path, sha256_file, task_names_for_cohort, utc_now
 
 
 CATALOG_PATH = ROOT / "config" / "tb3_task_catalog.json"
@@ -319,7 +319,17 @@ def category_key(row: dict[str, Any]) -> str:
     return str(row.get("subcategory") or row.get("domain") or "unknown")
 
 
-def build_summaries(rows: list[dict[str, Any]], catalog: dict[str, Any]) -> dict[str, Any]:
+def build_summaries(
+    rows: list[dict[str, Any]],
+    catalog: dict[str, Any],
+    expected_task_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    if expected_task_ids is None:
+        expected_task_ids = set(task_names_for_cohort(catalog))
+    else:
+        expected_task_ids = set(expected_task_ids)
+    expected_task_count = len(expected_task_ids)
+
     agents = sorted({str(row.get("agent_id")) for row in rows if row.get("agent_id")})
     if not agents:
         agents = ["opencode", "opencode2", "codex", "claude-code", "pi"]
@@ -330,14 +340,17 @@ def build_summaries(rows: list[dict[str, Any]], catalog: dict[str, Any]) -> dict
         counts = Counter(row.get("outcome") for row in selected)
         failures = Counter(row.get("failure_category") for row in selected)
         valid = [row for row in selected if row.get("verifier_valid")]
+        observed_tasks = {
+            row.get("task_id") for row in selected if row.get("task_id") in expected_task_ids
+        }
         passed = sum(row.get("passed") is True for row in selected)
         valid_passed = sum(row.get("passed") is True for row in valid)
         harness_summary.append(
             {
                 "agent_id": agent,
-                "expected_observations": len(catalog.get("tasks", {})),
+                "expected_observations": expected_task_count,
                 "scheduled_observations": len(selected),
-                "unobserved_observations": max(len(catalog.get("tasks", {})) - len(selected), 0),
+                "unobserved_observations": max(expected_task_count - len(observed_tasks), 0),
                 "passes": passed,
                 "end_to_end_pass_rate": passed / len(selected) if selected else None,
                 "valid_verifier_observations": len(valid),
@@ -384,6 +397,7 @@ def build_summaries(rows: list[dict[str, Any]], catalog: dict[str, Any]) -> dict
                 }
             )
 
+    catalog_tasks = catalog.get("tasks", {})
     by_task: dict[str, dict[str, Any]] = {
         task_name: {
             "task_id": task_name,
@@ -394,7 +408,8 @@ def build_summaries(rows: list[dict[str, Any]], catalog: dict[str, Any]) -> dict
             "capabilities": metadata.get("capabilities", []),
             "harnesses": {},
         }
-        for task_name, metadata in catalog.get("tasks", {}).items()
+        for task_name, metadata in catalog_tasks.items()
+        if task_name in expected_task_ids
     }
     for row in rows:
         task = row.get("task_id") or "unknown"
@@ -476,6 +491,7 @@ def build_summaries(rows: list[dict[str, Any]], catalog: dict[str, Any]) -> dict
 
     return {
         "task_catalog_count": len(catalog.get("tasks", {})),
+        "expected_task_count": expected_task_count,
         "observed_trial_count": len(rows),
         "observed_task_count": len({row.get("task_id") for row in rows if row.get("task_id")}),
         "complete_task_count": complete_task_count,
@@ -504,6 +520,7 @@ def median(values: list[Any]) -> float | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_directories", nargs="*", type=Path)
+    parser.add_argument("--cohort", choices=COHORTS)
     parser.add_argument(
         "--output",
         type=Path,
@@ -520,7 +537,10 @@ def main() -> int:
 
     run_dirs = discover_run_dirs(args.run_directories)
     rows = load_rows(run_dirs, catalog)
-    summaries = build_summaries(rows, catalog)
+    expected_task_ids = set(task_names_for_cohort(catalog, args.cohort))
+    if args.cohort is not None:
+        rows = [row for row in rows if row.get("coding_relevance") == args.cohort]
+    summaries = build_summaries(rows, catalog, expected_task_ids)
     write_jsonl(args.output / "trial_records.jsonl", rows)
     write_json(args.output / "harness_summary.json", summaries["harness_summary"])
     write_json(args.output / "category_summary.json", summaries["category_summary"])
@@ -531,6 +551,7 @@ def main() -> int:
         {
             "schema_version": "1.0",
             "created_at": utc_now(),
+            "cohort": args.cohort,
             "input_run_directories": [relative_path(path) for path in run_dirs],
             **summaries,
         },
