@@ -1,0 +1,8 @@
+{
+  "model": "stealth/ox-alpha",
+  "provider": "openrouter",
+  "base_url": "https://openrouter.ai/api/v1",
+  "provider_order": ["stealth"],
+  "allow_fallbacks": false,
+  "reasoning_effort": "max"
+}

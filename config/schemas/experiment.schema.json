@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "experiment_id", "toolchain", "model", "dataset", "execution", "agents"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "experiment_id": {"type": "string"},
+    "toolchain": {"type": "object"},
+    "model": {
+      "type": "object",
+      "required": ["id", "openrouter_provider", "openrouter_base_url", "reasoning_effort", "provider_order", "allow_fallbacks"],
+      "properties": {
+        "id": {"const": "stealth/ox-alpha"},
+        "openrouter_provider": {"type": "string"},
+        "openrouter_base_url": {"type": "string", "format": "uri"},
+        "reasoning_effort": {"enum": ["low", "high", "max"]},
+        "provider_order": {"type": "array", "items": {"type": "string"}},
+        "allow_fallbacks": {"type": "boolean"}
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "required": ["name", "ref", "scope"],
+      "properties": {
+        "name": {"type": "string"},
+        "ref": {"type": ["string", "null"]},
+        "scope": {"enum": ["full", "selected"]},
+        "task_names": {"type": ["array", "null"], "items": {"type": "string"}}
+      }
+    },
+    "execution": {"type": "object"},
+    "prompt_policy": {"type": "object"},
+    "agents": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["id", "harbor_agent", "version", "model_argument"],
+        "properties": {
+          "id": {"type": "string"},
+          "harbor_agent": {"type": "string"},
+          "version": {"type": "string"},
+          "model_argument": {"type": "string"}
+        }
+      }
+    }
+  }
+}

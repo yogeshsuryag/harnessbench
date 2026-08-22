@@ -1,0 +1,11 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "stealth/ox-alpha",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "stealth/ox-alpha",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "stealth/ox-alpha",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "stealth/ox-alpha",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "stealth/ox-alpha"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "provider": "openrouter",
+  "model": "stealth/ox-alpha",
+  "reasoning_effort": "xhigh",
+  "provider_order": ["stealth"],
+  "allow_fallbacks": false
+}

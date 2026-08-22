@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["run_id", "agent_id", "task_id", "attempt", "status", "failure_category"],
+  "properties": {
+    "run_id": {"type": "string"},
+    "harbor_job_id": {"type": ["string", "null"]},
+    "harbor_trial_id": {"type": ["string", "null"]},
+    "agent_id": {"type": "string"},
+    "task_id": {"type": "string"},
+    "attempt": {"type": "integer", "minimum": 1},
+    "status": {"type": "string"},
+    "failure_category": {"enum": ["none", "agent", "model_api", "infrastructure", "verifier", "benchmark", "unknown"]},
+    "exit_code": {"type": ["integer", "null"]},
+    "reward": {"type": ["number", "null"]},
+    "input_tokens": {"type": ["integer", "null"]},
+    "cached_tokens": {"type": ["integer", "null"]},
+    "output_tokens": {"type": ["integer", "null"]},
+    "reasoning_tokens": {"type": ["integer", "null"]},
+    "cost_usd": {"type": ["number", "null"]},
+    "wall_time_sec": {"type": ["number", "null"]},
+    "agent_time_sec": {"type": ["number", "null"]},
+    "verifier_time_sec": {"type": ["number", "null"]},
+    "stderr": {"type": ["string", "null"]},
+    "trajectory_path": {"type": ["string", "null"]}
+  }
+}

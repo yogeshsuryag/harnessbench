@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+results/runs/
+results/raw/
+results/derived/
+jobs/
+*.log
+
+# Local Harbor and tool caches
+.harbor/
+.uv/
+
+# Do not commit credentials or generated benchmark artifacts.
+**/auth.json
+**/.credentials.json
+**/cookies.json
