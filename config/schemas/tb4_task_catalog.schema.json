@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "dataset", "dataset_ref", "release", "task_count", "tasks"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "dataset": {"const": "terminal-bench/terminal-bench"},
+    "dataset_ref": {"const": "sha256:39d9f44b40420cde8fdcc087579c0d72a7e14fa3656d603c3f0d22fb35e27732"},
+    "release": {"const": "v4.0.0"},
+    "task_count": {"const": 66},
+    "gpu_tasks": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "compose_tasks": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "sidecar_artifact_tasks": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "tasks": {
+      "type": "object",
+      "minProperties": 66,
+      "maxProperties": 66,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["digest", "domain", "subcategory", "coding_relevance", "capabilities"],
+        "properties": {
+          "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "domain": {"type": "string"},
+          "subcategory": {"type": "string"},
+          "coding_relevance": {"enum": ["core_swe", "adjacent_engineering", "domain"]},
+          "capabilities": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

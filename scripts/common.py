@@ -14,9 +14,15 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "experiment.json"
+CATALOG_PATH = ROOT / "config" / "tb4_task_catalog.json"
 ENV_PATH = ROOT / ".env"
 UV_COMMAND = os.environ.get("UV", "uv")
 COHORTS = ("core_swe", "adjacent_engineering", "domain")
+DATASET_NAME = "terminal-bench/terminal-bench"
+DATASET_REF = "sha256:39d9f44b40420cde8fdcc087579c0d72a7e14fa3656d603c3f0d22fb35e27732"
+MODEL_ID_ENV = "MODEL_ID"
+MODEL_ID_PLACEHOLDER = "${MODEL_ID}"
+LOCKED_MODEL_ID = "stealth/ox-alpha"
 
 
 def task_names_for_cohort(catalog: dict[str, Any], cohort: str | None = None) -> list[str]:
@@ -92,6 +98,30 @@ def parse_dotenv(path: Path) -> dict[str, str]:
     return values
 
 
+def resolve_model_id(path: Path = ENV_PATH) -> str:
+    model_id = os.environ.get(MODEL_ID_ENV) or parse_dotenv(path).get(MODEL_ID_ENV)
+    if not model_id or not model_id.strip():
+        raise ValueError(
+            f"{MODEL_ID_ENV} is missing or empty in the process environment or {path}"
+        )
+    return model_id.strip()
+
+
+def resolve_model_placeholders(value: Any, model_id: str) -> Any:
+    if isinstance(value, dict):
+        return {
+            key.replace(MODEL_ID_PLACEHOLDER, model_id)
+            if isinstance(key, str)
+            else key: resolve_model_placeholders(item, model_id)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [resolve_model_placeholders(item, model_id) for item in value]
+    if isinstance(value, str):
+        return value.replace(MODEL_ID_PLACEHOLDER, model_id)
+    return value
+
+
 def command_result(args: Sequence[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
     command = list(args)
     try:
@@ -137,7 +167,16 @@ def fetch_json(url: str) -> dict[str, Any] | None:
 
 
 def model_metadata(model_id: str) -> dict[str, Any] | None:
-    return fetch_json(f"https://openrouter.ai/api/v1/model/{model_id}")
+    payload = fetch_json("https://openrouter.ai/api/v1/models")
+    if payload is None:
+        return None
+    rows = payload.get("data")
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if isinstance(row, dict) and row.get("id") == model_id:
+            return {"data": row}
+    return None
 
 
 def endpoint_metadata(model_id: str) -> dict[str, Any] | None:

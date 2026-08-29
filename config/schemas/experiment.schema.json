@@ -10,7 +10,7 @@
       "required": ["phase", "scheduled_trials", "replications_per_task_harness"],
       "properties": {
         "phase": {"const": "pilot"},
-        "scheduled_trials": {"const": 370},
+        "scheduled_trials": {"const": 330},
         "replications_per_task_harness": {"const": 1},
         "analysis_policy": {"type": "string"}
       }
@@ -18,25 +18,26 @@
     "toolchain": {"type": "object"},
     "model": {
       "type": "object",
-      "required": ["id", "openrouter_provider", "openrouter_base_url", "reasoning_effort", "provider_order", "allow_fallbacks"],
+      "required": ["id", "id_env", "openrouter_provider", "openrouter_base_url", "reasoning_effort", "provider_order", "allow_fallbacks", "require_parameters"],
       "properties": {
-        "id": {"const": "stealth/ox-alpha"},
-        "openrouter_provider": {"type": "string"},
-        "openrouter_base_url": {"type": "string", "format": "uri"},
-        "reasoning_effort": {"enum": ["low", "high", "max"]},
-        "provider_order": {"type": "array", "items": {"type": "string"}},
-        "allow_fallbacks": {"type": "boolean"},
-        "require_parameters": {"type": "boolean"}
+        "id": {"pattern": "^\\$\\{MODEL_ID\\}$"},
+        "id_env": {"const": "MODEL_ID"},
+        "openrouter_provider": {"const": "stealth"},
+        "openrouter_base_url": {"const": "https://openrouter.ai/api/v1"},
+        "reasoning_effort": {"const": "max"},
+        "provider_order": {"const": ["stealth"]},
+        "allow_fallbacks": {"const": false},
+        "require_parameters": {"const": true}
       }
     },
     "dataset": {
       "type": "object",
       "required": ["name", "ref", "scope"],
       "properties": {
-        "name": {"type": "string"},
-        "ref": {"type": ["string", "null"]},
-        "scope": {"enum": ["full", "selected"]},
-        "task_names": {"type": ["array", "null"], "items": {"type": "string"}}
+        "name": {"const": "terminal-bench/terminal-bench"},
+        "ref": {"const": "sha256:39d9f44b40420cde8fdcc087579c0d72a7e14fa3656d603c3f0d22fb35e27732"},
+        "scope": {"const": "full"},
+        "task_names": {"const": null}
       }
     },
     "execution": {"type": "object"},
@@ -51,7 +52,7 @@
           "id": {"type": "string"},
           "harbor_agent": {"type": "string"},
           "version": {"type": "string"},
-          "model_argument": {"type": "string"},
+          "model_argument": {"type": "string", "pattern": "^(\\$\\{MODEL_ID\\}|openrouter/\\$\\{MODEL_ID\\})$"},
           "native_config": {"type": "string"},
           "reasoning_setting": {"type": "string"},
           "native_reasoning_setting": {"type": "string"},

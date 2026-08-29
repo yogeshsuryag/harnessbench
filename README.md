@@ -1,21 +1,22 @@
 # harnessbench
 
-`harnessbench` runs a 370-trial Terminal-Bench 3.0 pilot across terminal
+`harnessbench` runs a 330-trial Terminal-Bench 4.0 pilot across terminal
 coding agents. Harbor controls the jobs on the Windows controller, while
 Daytona provides independent Linux task sandboxes.
 
 ## Locked Experiment
 
-- Model: `stealth/ox-alpha`
+- Model: `MODEL_ID` (must be `stealth/ox-alpha` for this locked pilot)
 - OpenRouter provider: `stealth`
 - Dataset: `terminal-bench/terminal-bench`
-- Dataset ref: `sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3`
-- Dataset size: 74 tasks
+- Dataset release: `v4.0.0`
+- Dataset ref: `sha256:39d9f44b40420cde8fdcc087579c0d72a7e14fa3656d603c3f0d22fb35e27732`
+- Dataset size: 66 tasks
 - Agents: OpenCode 1, OpenCode 2, Codex CLI, Claude Code, and Pi
 - Attempts: 1
 - Initial concurrency: 1
 - Retries: 0
-- Pilot comparison: 370 trials
+- Pilot comparison: 330 trials
 - Replications per task and harness: 1
 
 The dataset ref is immutable. Do not replace it with `latest` during a
@@ -44,6 +45,7 @@ Create `.env` from `.env.example` and fill it locally:
 ```text
 OPENROUTER_API_KEY=<your OpenRouter key>
 DAYTONA_API_KEY=<your Daytona key>
+MODEL_ID=stealth/ox-alpha
 ```
 
 Never commit or print secret values.
@@ -66,15 +68,15 @@ uv run --locked harbor run --print-config --config results/runs/<run-id>/job-con
 Run the one-task Oracle smoke test before agent trials:
 
 ```text
-uv run --locked harbor run -d terminal-bench/terminal-bench@sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3 -a oracle -n 1 -k 1 -l 1 --env daytona --env-file .env --yes
+uv run --locked harbor run -d terminal-bench/terminal-bench@sha256:39d9f44b40420cde8fdcc087579c0d72a7e14fa3656d603c3f0d22fb35e27732 -a oracle -n 1 -k 1 -l 1 --env daytona --env-file .env --yes
 ```
 
 Before interpreting the pilot, validate the released task suite with the
-Oracle solution five times. This is separate from the 370 agent comparison
-trials and follows the Terminal-Bench 3.0 task-health guidance:
+Oracle solution five times. This is separate from the 330 agent comparison
+trials and follows the Terminal-Bench 4.0 task-health guidance:
 
 ```text
-uv run --locked harbor run -d terminal-bench/terminal-bench@sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3 -a oracle -n 1 -k 5 -l 74 --env daytona --env-file .env --yes
+uv run --locked harbor run -d terminal-bench/terminal-bench@sha256:39d9f44b40420cde8fdcc087579c0d72a7e14fa3656d603c3f0d22fb35e27732 -a oracle -n 1 -k 5 -l 66 --env daytona --env-file .env --yes
 ```
 
 Validate the completed Oracle job before interpreting agent results:
@@ -86,19 +88,20 @@ uv run --locked python scripts/validate_oracle.py jobs/<oracle-job-directory>
 Run the same task with every agent after the Oracle smoke test passes:
 
 ```text
-uv run --locked python scripts/run_benchmark.py --agent opencode --task ico-path-patch
-uv run --locked python scripts/run_benchmark.py --agent opencode2 --task ico-path-patch
-uv run --locked python scripts/run_benchmark.py --agent codex --task ico-path-patch
-uv run --locked python scripts/run_benchmark.py --agent claude-code --task ico-path-patch
-uv run --locked python scripts/run_benchmark.py --agent pi --task ico-path-patch
+uv run --locked python scripts/run_benchmark.py --agent opencode --task html-js-filter
+uv run --locked python scripts/run_benchmark.py --agent opencode2 --task html-js-filter
+uv run --locked python scripts/run_benchmark.py --agent codex --task html-js-filter
+uv run --locked python scripts/run_benchmark.py --agent claude-code --task html-js-filter
+uv run --locked python scripts/run_benchmark.py --agent pi --task html-js-filter
 ```
 
-Confirm that every request uses `stealth/ox-alpha` through the `stealth`
-provider and that the Terminal-Bench verifier runs before scaling up.
+Confirm that every request uses the resolved `MODEL_ID` value, which must be
+`stealth/ox-alpha`, through the `stealth` provider and that the Terminal-Bench
+verifier runs before scaling up.
 
 Run the staged pilot only after all smoke tests pass. The cohort selector uses
-the pinned `coding_relevance` field in `config/tb3_task_catalog.json` and keeps
-the full 370-trial contract unchanged:
+the pinned `coding_relevance` field in `config/tb4_task_catalog.json` and keeps
+the full 330-trial contract unchanged:
 
 ```text
 uv run --locked python scripts/run_benchmark.py --agent all --cohort core_swe
@@ -106,8 +109,8 @@ uv run --locked python scripts/run_benchmark.py --agent all --cohort adjacent_en
 uv run --locked python scripts/run_benchmark.py --agent all --cohort domain
 ```
 
-The three stages contain 25, 27, and 22 tasks respectively, for 125, 135,
-and 110 agent trials. Each run manifest records the cohort and resolved task
+The three stages contain 21, 24, and 21 tasks respectively, for 105, 120,
+and 105 agent trials. Each run manifest records the cohort and resolved task
 list. Produce a stage-specific report with the matching cohort filter:
 
 ```text
@@ -117,7 +120,9 @@ uv run --locked python scripts/pilot_results.py --cohort domain --output results
 ```
 
 Run `scripts/pilot_results.py` without `--cohort` after all stages to produce
-the aggregate 74-task report.
+the aggregate 66-task report. Automatically discovered run manifests that do
+not pin the TB4 dataset ref are ignored; explicitly supplied legacy run
+directories are rejected, preventing TB3 output from being mixed into the report.
 
 The pilot is descriptive: it identifies which harness solves which task and
 capability categories. It does not claim statistical significance from one
@@ -162,8 +167,8 @@ model API, infrastructure, verifier, and benchmark failures distinct via
 ```text
 config/experiment.json       locked experiment contract
 config/agents/               native agent configurations
-config/schemas/              JSON schemas (experiment, TB3 catalog)
-config/tb3_task_catalog.json Terminal-Bench 3.0 task taxonomy and digests
+config/schemas/              JSON schemas (experiment, TB4 catalog)
+config/tb4_task_catalog.json Terminal-Bench 4.0 task taxonomy and digests
 custom_agents/opencode2.py   Harbor adapter for OpenCode 2
 custom_agents/codex.py       Full-model OpenRouter Codex adapter
 scripts/preflight.py         no-job validation

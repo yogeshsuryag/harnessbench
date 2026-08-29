@@ -1,4 +1,4 @@
-"""Validate a Terminal-Bench 3.0 Oracle job before interpreting the pilot."""
+"""Validate a Terminal-Bench 4.0 Oracle job before interpreting the pilot."""
 
 from __future__ import annotations
 
@@ -9,10 +9,9 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from common import ROOT, relative_path, utc_now
+from common import CATALOG_PATH, DATASET_NAME, DATASET_REF, relative_path, utc_now
 
 
-CATALOG_PATH = ROOT / "config" / "tb3_task_catalog.json"
 REQUIRED_ORACLE_ATTEMPTS = 5
 
 
@@ -76,7 +75,29 @@ def main() -> int:
         print(f"Oracle job directory does not exist: {job_dir}", file=sys.stderr)
         return 1
 
+    dataset_mismatches: list[dict[str, Any]] = []
+    job_config_path = job_dir / "config.json"
+    if not job_config_path.is_file():
+        dataset_mismatches.append({"error": f"Missing job config: {job_config_path}"})
+    else:
+        try:
+            job_config = load_json(job_config_path)
+        except (OSError, ValueError) as error:
+            dataset_mismatches.append({"error": f"Unable to read {job_config_path}: {error}"})
+        else:
+            datasets = job_config.get("datasets")
+            if not isinstance(datasets, list) or len(datasets) != 1:
+                dataset_mismatches.append({"datasets": datasets})
+            else:
+                dataset = datasets[0]
+                if not isinstance(dataset, dict) or (
+                    dataset.get("name") != DATASET_NAME
+                    or dataset.get("ref") != DATASET_REF
+                ):
+                    dataset_mismatches.append({"dataset": dataset})
+
     observations: list[dict[str, Any]] = []
+    task_ref_mismatches: list[dict[str, Any]] = []
     for filename in ("result.json", "results.json"):
         for result_path in job_dir.rglob(filename):
             try:
@@ -86,6 +107,25 @@ def main() -> int:
             normalized_task = task_id(result.get("task_name"))
             if normalized_task is None or "trial_name" not in result:
                 continue
+            expected_digest = catalog.get("tasks", {}).get(normalized_task, {}).get("digest")
+            task_id_data = result.get("task_id")
+            actual_digest = task_id_data.get("ref") if isinstance(task_id_data, dict) else None
+            actual_source = result.get("source")
+            if (
+                normalized_task not in expected_tasks
+                or actual_digest != expected_digest
+                or actual_source != DATASET_NAME
+            ):
+                task_ref_mismatches.append(
+                    {
+                        "task_id": normalized_task,
+                        "expected_digest": expected_digest,
+                        "actual_digest": actual_digest,
+                        "expected_source": DATASET_NAME,
+                        "actual_source": actual_source,
+                        "result_path": relative_path(result_path),
+                    }
+                )
             observations.append(
                 {
                     "task_id": normalized_task,
@@ -111,6 +151,8 @@ def main() -> int:
         "schema_version": "1.0",
         "created_at": utc_now(),
         "oracle_job": relative_path(job_dir),
+        "dataset_name": DATASET_NAME,
+        "dataset_ref": DATASET_REF,
         "required_attempts_per_task": args.attempts,
         "expected_task_count": len(expected_tasks),
         "observed_trial_count": len(observations),
@@ -119,10 +161,14 @@ def main() -> int:
         "unexpected_tasks": unexpected_tasks,
         "insufficient_attempts": insufficient_attempts,
         "nonpassing_observations": dict(sorted(failures.items())),
+        "dataset_mismatches": dataset_mismatches,
+        "task_ref_mismatches": task_ref_mismatches,
         "ok": not missing_tasks
         and not unexpected_tasks
         and not insufficient_attempts
-        and not failures,
+        and not failures
+        and not dataset_mismatches
+        and not task_ref_mismatches,
     }
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["ok"] else 1

@@ -9,9 +9,12 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import threading
+import tomllib
 import uuid
 
 from common import (
+    CATALOG_PATH,
     CONFIG_PATH,
     COHORTS,
     ENV_PATH,
@@ -22,6 +25,8 @@ from common import (
     model_metadata,
     parse_dotenv,
     relative_path,
+    resolve_model_id,
+    resolve_model_placeholders,
     sha256_file,
     task_names_for_cohort,
     tool_versions,
@@ -35,8 +40,64 @@ def run_id(agent_id: str) -> str:
     return f"{timestamp}-{agent_id}-{uuid.uuid4().hex[:8]}"
 
 
-def agent_environment(agent_id: str) -> dict[str, str]:
-    common = {"OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}"}
+def run_streaming(
+    command: list[str],
+    stdout_path: Path,
+    stderr_path: Path,
+) -> int:
+    process = subprocess.Popen(
+        command,
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+
+    def forward(source, target, console) -> None:
+        for line in iter(source.readline, ""):
+            target.write(line)
+            target.flush()
+            try:
+                console.write(line)
+            except UnicodeEncodeError:
+                encoding = getattr(console, "encoding", None) or "utf-8"
+                safe_line = line.encode(encoding, errors="replace").decode(encoding, errors="replace")
+                console.write(safe_line)
+            console.flush()
+        source.close()
+
+    with (
+        stdout_path.open("w", encoding="utf-8", newline="\n") as stdout,
+        stderr_path.open("w", encoding="utf-8", newline="\n") as stderr,
+    ):
+        threads = [
+            threading.Thread(
+                target=forward,
+                args=(process.stdout, stdout, sys.stdout),
+                daemon=True,
+            ),
+            threading.Thread(
+                target=forward,
+                args=(process.stderr, stderr, sys.stderr),
+                daemon=True,
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        return_code = process.wait()
+        for thread in threads:
+            thread.join()
+    return return_code
+
+
+def agent_environment(agent_id: str, model_id: str) -> dict[str, str]:
+    common = {
+        "MODEL_ID": model_id,
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+    }
     if agent_id in {"opencode", "opencode2", "pi"}:
         common["OPENROUTER_BASE_URL"] = "https://openrouter.ai/api/v1"
     elif agent_id == "codex":
@@ -52,11 +113,11 @@ def agent_environment(agent_id: str) -> dict[str, str]:
                 "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
                 "ANTHROPIC_AUTH_TOKEN": "${OPENROUTER_API_KEY}",
                 "ANTHROPIC_API_KEY": "",
-                "ANTHROPIC_DEFAULT_FABLE_MODEL": "stealth/ox-alpha",
-                "ANTHROPIC_DEFAULT_OPUS_MODEL": "stealth/ox-alpha",
-                "ANTHROPIC_DEFAULT_SONNET_MODEL": "stealth/ox-alpha",
-                "ANTHROPIC_DEFAULT_HAIKU_MODEL": "stealth/ox-alpha",
-                "CLAUDE_CODE_SUBAGENT_MODEL": "stealth/ox-alpha",
+                "ANTHROPIC_DEFAULT_FABLE_MODEL": model_id,
+                "ANTHROPIC_DEFAULT_OPUS_MODEL": model_id,
+                "ANTHROPIC_DEFAULT_SONNET_MODEL": model_id,
+                "ANTHROPIC_DEFAULT_HAIKU_MODEL": model_id,
+                "CLAUDE_CODE_SUBAGENT_MODEL": model_id,
             }
         )
     return common
@@ -87,15 +148,22 @@ def build_job_config(
             environment[target] = resources[source]
 
     native_config = ROOT / agent["native_config"]
+    model_id = config["model"]["id"]
     kwargs: dict = {}
     if agent["id"] in {"opencode", "opencode2"}:
-        kwargs["opencode_config"] = load_json(native_config)
+        kwargs["opencode_config"] = resolve_model_placeholders(
+            load_json(native_config), model_id
+        )
         kwargs["variant"] = config["model"]["reasoning_effort"]
     elif agent["id"] == "codex":
-        kwargs["config"] = str(native_config.resolve())
+        kwargs["config"] = resolve_model_placeholders(
+            tomllib.loads(native_config.read_text(encoding="utf-8")), model_id
+        )
         kwargs["reasoning_effort"] = config["model"]["reasoning_effort"]
     elif agent["id"] == "claude-code":
-        kwargs["config"] = str(native_config.resolve())
+        kwargs["config"] = resolve_model_placeholders(
+            load_json(native_config), model_id
+        )
         kwargs["reasoning_effort"] = config["model"]["reasoning_effort"]
     elif agent["id"] == "pi":
         kwargs["model_api"] = agent.get("model_api", "openai-completions")
@@ -107,14 +175,18 @@ def build_job_config(
         "name": agent["harbor_agent"],
         "model_name": agent["model_argument"],
         "kwargs": kwargs,
-        "env": agent_environment(agent["id"]),
+        "env": agent_environment(agent["id"], model_id),
     }
     dataset = {
         "name": config["dataset"]["name"],
         "ref": config["dataset"]["ref"],
     }
     if task_names:
-        dataset["task_names"] = task_names
+        namespace = dataset["name"].rsplit("/", 1)[0]
+        dataset["task_names"] = [
+            task_name if "/" in task_name else f"{namespace}/{task_name}"
+            for task_name in task_names
+        ]
 
     return {
         "job_name": run_directory.name,
@@ -159,7 +231,7 @@ def run_one(
     native_config_path = ROOT / agent["native_config"]
     source_files = [
         CONFIG_PATH,
-        ROOT / "config" / "tb3_task_catalog.json",
+        CATALOG_PATH,
         native_config_path,
         ROOT / "pyproject.toml",
         ROOT / "uv.lock",
@@ -221,17 +293,20 @@ def run_one(
         write_json(run_directory / "manifest.json", manifest)
         return 0
 
-    with (run_directory / "stdout.log").open("w", encoding="utf-8", newline="\n") as stdout, (
-        run_directory / "stderr.log"
-    ).open("w", encoding="utf-8", newline="\n") as stderr:
-        process = subprocess.run(command, cwd=ROOT, stdout=stdout, stderr=stderr, check=False)
+    print(f"[{agent['id']}] Starting Harbor job {run_directory.name}", flush=True)
+    exit_code = run_streaming(
+        command,
+        run_directory / "stdout.log",
+        run_directory / "stderr.log",
+    )
+    print(f"[{agent['id']}] Harbor process exited with code {exit_code}", flush=True)
 
-    manifest["status"] = "process-complete" if process.returncode == 0 else "process-error"
-    manifest["harbor_process_ok"] = process.returncode == 0
-    manifest["exit_code"] = process.returncode
+    manifest["status"] = "process-complete" if exit_code == 0 else "process-error"
+    manifest["harbor_process_ok"] = exit_code == 0
+    manifest["exit_code"] = exit_code
     manifest["finished_at"] = utc_now()
     write_json(run_directory / "manifest.json", manifest)
-    return process.returncode
+    return exit_code
 
 
 def main() -> int:
@@ -247,16 +322,32 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    config = load_json(args.config)
+    try:
+        model_id = resolve_model_id(args.env_file)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    config = resolve_model_placeholders(load_json(args.config), model_id)
     execution = config["execution"]
     concurrency = args.concurrency or execution["concurrency"]
     attempts = args.attempts or execution["attempts"]
+    catalog = load_json(CATALOG_PATH)
+
     if args.cohort:
-        catalog = load_json(ROOT / "config" / "tb3_task_catalog.json")
         try:
             task_names = task_names_for_cohort(catalog, args.cohort)
         except ValueError as error:
             raise SystemExit(str(error)) from error
+    elif args.task_names:
+        unknown_tasks = sorted(
+            {
+                task_name.rsplit("/", 1)[-1]
+                for task_name in args.task_names
+                if task_name.rsplit("/", 1)[-1] not in catalog.get("tasks", {})
+            }
+        )
+        if unknown_tasks:
+            raise SystemExit(f"Unknown TB4 task(s): {', '.join(unknown_tasks)}")
+        task_names = args.task_names
     else:
         task_names = args.task_names if args.task_names else config["dataset"].get("task_names")
 

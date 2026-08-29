@@ -10,10 +10,19 @@ from pathlib import Path
 import sys
 from typing import Any, Iterable
 
-from common import COHORTS, ROOT, relative_path, sha256_file, task_names_for_cohort, utc_now
+from common import (
+    CATALOG_PATH,
+    COHORTS,
+    DATASET_NAME,
+    DATASET_REF,
+    ROOT,
+    relative_path,
+    sha256_file,
+    task_names_for_cohort,
+    utc_now,
+)
 
 
-CATALOG_PATH = ROOT / "config" / "tb3_task_catalog.json"
 RUNS_PATH = ROOT / "results" / "runs"
 
 
@@ -197,6 +206,18 @@ def trial_result_paths(jobs_dir: Path) -> list[Path]:
     return sorted(set(paths))
 
 
+def is_current_dataset(manifest: dict[str, Any]) -> bool:
+    experiment = manifest.get("experiment")
+    dataset = experiment.get("dataset") if isinstance(experiment, dict) else None
+    return (
+        isinstance(dataset, dict)
+        and dataset.get("name") == DATASET_NAME
+        and dataset.get("ref") == DATASET_REF
+        and dataset.get("scope") == "full"
+        and dataset.get("task_names") is None
+    )
+
+
 def normalize_trial(run_dir: Path, result_path: Path, catalog: dict[str, Any]) -> dict[str, Any] | None:
     try:
         result = load_json(result_path)
@@ -210,7 +231,12 @@ def normalize_trial(run_dir: Path, result_path: Path, catalog: dict[str, Any]) -
     agent = manifest.get("agent") if isinstance(manifest.get("agent"), dict) else {}
     agent_id = agent.get("id") or (result.get("agent_info") or {}).get("name")
     normalized_task_id = task_id(result.get("task_name"))
+    if normalized_task_id not in catalog.get("tasks", {}):
+        return None
     task = catalog.get("tasks", {}).get(normalized_task_id or "", {})
+    result_task = result.get("task_id")
+    if isinstance(result_task, dict) and result_task.get("ref") not in {None, task.get("digest")}:
+        return None
     trial_dir = result_path.parent
     rewards = reward_data(trial_dir, result)
     input_tokens, cache_tokens, output_tokens, cost = sum_contexts(result)
@@ -292,12 +318,42 @@ def discover_run_dirs(inputs: list[Path]) -> list[Path]:
     return sorted(path for path in RUNS_PATH.iterdir() if path.is_dir())
 
 
-def load_rows(run_dirs: list[Path], catalog: dict[str, Any]) -> list[dict[str, Any]]:
+def current_run_dirs(run_dirs: list[Path]) -> list[Path]:
+    current: list[Path] = []
+    for run_dir in run_dirs:
+        manifest_path = run_dir / "manifest.json"
+        if not manifest_path.is_file() or not (run_dir / "job-config.json").is_file():
+            continue
+        try:
+            manifest = load_json(manifest_path)
+        except (OSError, ValueError):
+            continue
+        if is_current_dataset(manifest):
+            current.append(run_dir)
+    return current
+
+
+def load_rows(
+    run_dirs: list[Path],
+    catalog: dict[str, Any],
+    *,
+    reject_incompatible: bool = True,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for run_dir in run_dirs:
         manifest_path = run_dir / "manifest.json"
         job_config_path = run_dir / "job-config.json"
         if not manifest_path.is_file() or not job_config_path.is_file():
+            continue
+        try:
+            manifest = load_json(manifest_path)
+        except (OSError, ValueError) as error:
+            raise ValueError(f"Unable to read run manifest {manifest_path}: {error}") from error
+        if not is_current_dataset(manifest):
+            if reject_incompatible:
+                raise ValueError(
+                    f"Run directory is not a full TB4 run for {DATASET_REF}: {run_dir}"
+                )
             continue
         try:
             job_config = load_json(job_config_path)
@@ -536,7 +592,16 @@ def main() -> int:
         )
 
     run_dirs = discover_run_dirs(args.run_directories)
-    rows = load_rows(run_dirs, catalog)
+    if not args.run_directories:
+        run_dirs = current_run_dirs(run_dirs)
+    try:
+        rows = load_rows(
+            run_dirs,
+            catalog,
+            reject_incompatible=True,
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     expected_task_ids = set(task_names_for_cohort(catalog, args.cohort))
     if args.cohort is not None:
         rows = [row for row in rows if row.get("coding_relevance") == args.cohort]

@@ -1,6 +1,6 @@
 {
   "provider": "openrouter",
-  "model": "stealth/ox-alpha",
+  "model": "${MODEL_ID}",
   "api": "openai-completions",
   "reasoning_effort": "max",
   "provider_order": ["stealth"],

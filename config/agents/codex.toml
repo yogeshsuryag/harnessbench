@@ -1,5 +1,5 @@
 model_provider = "openrouter"
-model = "stealth/ox-alpha"
+model = "${MODEL_ID}"
 model_reasoning_effort = "max"
 
 [model_providers.openrouter]

@@ -3,7 +3,7 @@
   "provider": {
     "openrouter": {
       "models": {
-        "stealth/ox-alpha": {
+        "${MODEL_ID}": {
           "options": {
             "provider": {
               "order": ["stealth"],
@@ -15,5 +15,5 @@
       }
     }
   },
-  "model": "openrouter/stealth/ox-alpha"
+  "model": "openrouter/${MODEL_ID}"
 }

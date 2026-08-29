@@ -2,10 +2,10 @@
   "$schema": "./schemas/experiment.schema.json",
   "schema_version": "1.0",
   "experiment_id": "terminal-bench-pilot-harness-comparison",
-  "description": "Terminal-Bench 3.0 pilot comparison with a fixed OpenRouter model and Daytona execution.",
+  "description": "Terminal-Bench 4.0 pilot comparison with a fixed OpenRouter model and Daytona execution.",
   "study": {
     "phase": "pilot",
-    "scheduled_trials": 370,
+    "scheduled_trials": 330,
     "replications_per_task_harness": 1,
     "analysis_policy": "descriptive_task_and_capability_comparison"
   },
@@ -16,7 +16,8 @@
     "controller_is_system_agnostic": true
   },
   "model": {
-    "id": "stealth/ox-alpha",
+    "id": "${MODEL_ID}",
+    "id_env": "MODEL_ID",
     "openrouter_provider": "stealth",
     "openrouter_base_url": "https://openrouter.ai/api/v1",
     "reasoning_effort": "max",
@@ -26,7 +27,7 @@
   },
   "dataset": {
     "name": "terminal-bench/terminal-bench",
-    "ref": "sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3",
+    "ref": "sha256:39d9f44b40420cde8fdcc087579c0d72a7e14fa3656d603c3f0d22fb35e27732",
     "scope": "full",
     "task_names": null
   },
@@ -57,7 +58,7 @@
       "id": "opencode",
       "harbor_agent": "opencode",
       "version": "1.18.21",
-      "model_argument": "openrouter/stealth/ox-alpha",
+      "model_argument": "openrouter/${MODEL_ID}",
       "reasoning_setting": "model-default-max",
       "native_config": "config/agents/opencode.json"
     },
@@ -65,7 +66,7 @@
       "id": "opencode2",
       "harbor_agent": "custom_agents.opencode2:OpenCode2",
       "version": "0.0.0-beta-17927",
-      "model_argument": "openrouter/stealth/ox-alpha",
+      "model_argument": "openrouter/${MODEL_ID}",
       "reasoning_setting": "max",
       "native_config": "config/agents/opencode2.json"
     },
@@ -73,7 +74,7 @@
       "id": "codex",
       "harbor_agent": "custom_agents.codex:OpenRouterCodex",
       "version": "0.149.0",
-      "model_argument": "stealth/ox-alpha",
+      "model_argument": "${MODEL_ID}",
       "reasoning_setting": "max",
       "native_config": "config/agents/codex.toml"
     },
@@ -81,7 +82,7 @@
       "id": "claude-code",
       "harbor_agent": "claude-code",
       "version": "2.1.240",
-      "model_argument": "stealth/ox-alpha",
+      "model_argument": "${MODEL_ID}",
       "reasoning_setting": "max",
       "native_config": "config/agents/claude-code.json"
     },
@@ -89,7 +90,7 @@
       "id": "pi",
       "harbor_agent": "pi",
       "version": "0.84.2",
-      "model_argument": "openrouter/stealth/ox-alpha",
+      "model_argument": "openrouter/${MODEL_ID}",
       "reasoning_setting": "max",
       "native_reasoning_setting": "xhigh",
       "model_api": "openai-completions",
